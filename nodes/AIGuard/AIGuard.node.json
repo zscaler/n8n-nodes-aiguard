@@ -1,0 +1,18 @@
+{
+	"node": "@bdzscaler/n8n-nodes-aiguard.aiGuard",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["AI", "Security"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://help.zscaler.com/ai-guard"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/zscaler/n8n-nodes-aiguard"
+			}
+		]
+	}
+}

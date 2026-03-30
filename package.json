@@ -10,13 +10,14 @@
     "ai-guard",
     "security-scanning",
     "ai-runtime-security",
-    "guardrails"
+    "guardrails",
+    "zero-trust"
   ],
   "license": "MIT",
   "homepage": "https://github.com/zscaler/n8n-nodes-aiguard",
   "author": {
     "name": "Zscaler",
-    "email": "support@zscaler.com"
+    "email": "devrel@zscaler.com"
   },
   "repository": {
     "type": "git",

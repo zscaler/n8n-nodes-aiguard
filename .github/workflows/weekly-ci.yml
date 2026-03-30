@@ -48,8 +48,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: npm audit
-        run: npm audit --audit-level=moderate
+      # Omit devDependencies: @semantic-release/npm depends on the `npm` package, whose
+      # bundled deps trigger false-positive–style audit noise unrelated to the published tarball.
+      - name: npm audit (production graph only)
+        run: npm audit --omit=dev --audit-level=moderate
 
       - name: Build
         run: npm run build

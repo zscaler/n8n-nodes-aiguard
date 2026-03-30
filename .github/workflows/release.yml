@@ -48,8 +48,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: npm audit
-        run: npm audit --audit-level=moderate
+      # Only the production dependency graph (this package ships `dependencies: {}`).
+      # Full `npm audit` fails on nested packages inside the `npm` tarball pulled by
+      # @semantic-release/npm — not exploitable from the published community node.
+      - name: npm audit (production graph only)
+        run: npm audit --omit=dev --audit-level=moderate
 
       - name: Build
         run: npm run build

@@ -8,6 +8,8 @@
 #
 # Bump the version in package.json on the release PR; if that version already exists on npm,
 # the publish step is skipped (idempotent).
+#
+# Node >= 22 required for npm ci (isolated-vm via eslint-plugin-n8n-nodes-base).
 
 name: Release to npm
 
@@ -36,7 +38,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: npm
 
       - name: Install dependencies
@@ -69,7 +71,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           registry-url: https://registry.npmjs.org
           cache: npm
 

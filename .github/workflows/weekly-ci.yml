@@ -5,8 +5,10 @@
 #
 # Manual run: Actions → "Weekly CI" → Run workflow
 #
-# Release / npm publish: use a separate workflow (e.g. on release tags) with
-# npm publish --provenance if you need OIDC + supply-chain attestation for npm/n8n.
+# Node: devDependencies (eslint-plugin-n8n-nodes-base → isolated-vm) require Node >= 22.
+# Older Node versions fail npm ci during isolated-vm native compile (see V8 SourceLocation errors).
+#
+# Release / npm publish: see .github/workflows/release.yml
 
 name: Weekly CI
 
@@ -33,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ['18.x', '20.x']
+        node-version: ['22.x', '24.x']
 
     steps:
       - uses: actions/checkout@v4

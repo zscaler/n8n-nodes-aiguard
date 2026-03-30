@@ -19,7 +19,7 @@ export class AIGuardApi implements ICredentialType {
       },
       default: '',
       required: true,
-			description: 'The API key for Zscaler AI Guard API (Bearer token)',
+      description: 'The API key for Zscaler AI Guard API (Bearer token)',
     },
     {
       displayName: 'Cloud',

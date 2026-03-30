@@ -1,0 +1,62 @@
+# Weekly smoke checks for @bdzscaler/n8n-nodes-aiguard
+#
+# Schedule: Monday 06:00 Pacific Standard Time (PST, UTC-8) → 14:00 UTC.
+# When US Pacific is on daylight time (PDT, UTC-7), this runs ~07:00 Los Angeles.
+#
+# Manual run: Actions → "Weekly CI" → Run workflow
+#
+# Release / npm publish: use a separate workflow (e.g. on release tags) with
+# npm publish --provenance if you need OIDC + supply-chain attestation for npm/n8n.
+
+name: Weekly CI
+
+on:
+  schedule:
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: n8n-nodes-aiguard-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Node ${{ matrix.node-version }} — audit, build, lint, test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['18.x', '20.x']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Build
+        run: npm run build
+
+      - name: Prettier (check)
+        run: npx prettier --check nodes credentials
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Unit tests (Jest)
+        run: npm test -- --passWithNoTests

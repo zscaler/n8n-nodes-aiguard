@@ -99,8 +99,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      # setup-node + registry-url writes .npmrc using NODE_AUTH_TOKEN (not NPM_TOKEN).
+      # @semantic-release/npm falls back to that file after OIDC exchange (404 until trusted
+      # publishing is configured on npm for this repo).
       - name: Run semantic-release
         run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

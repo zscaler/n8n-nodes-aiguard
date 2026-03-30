@@ -1,6 +1,6 @@
 {
   "name": "@bdzscaler/n8n-nodes-aiguard",
-  "version": "1.0.0",
+  "version": "0.1.2",
   "description": "n8n community node for Zscaler AI Guard (AI Runtime Security) API integration",
   "keywords": [
     "n8n-community-node-package",

@@ -8,8 +8,10 @@
 # Prereleases: push to branch `beta` or `alpha` to publish e.g. 1.0.0-beta.1 on npm dist-tag
 # `beta` / `alpha` (see .releaserc.json "branches").
 #
-# Before first semantic-release run, ensure git tags exist for versions already published to npm
-# (e.g. git tag v0.1.2 <commit> && git push origin v0.1.2) so the next bump continues from 0.x.
+# CRITICAL for 0.x packages: semantic-release uses git tags as the source of truth. If there are
+# NO vX.Y.Z tags on the branch, the *first* automated release is hardcoded to 1.0.0 (it does NOT
+# read package.json for that first version). Tag every version already on npm BEFORE the first
+# successful release job (e.g. git tag v0.1.0 <sha> && git tag v0.1.2 <sha> && git push origin --tags).
 #
 # Secrets (Settings → Secrets → Actions):
 #   NPM_TOKEN — npm automation token with publish rights for @bdzscaler
@@ -98,6 +100,20 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # semantic-release/lib/get-next-version.js: if lastRelease.version is missing (no v* tags),
+      # next version is ALWAYS constants.FIRST_RELEASE ("1.0.0") — not package.json.
+      - name: Guard — 0.x repos must have semver git tags before semantic-release
+        run: |
+          set -euo pipefail
+          PKG_VER=$(node -p "require('./package.json').version")
+          node -e "process.exit(/^0\\./.test(process.argv[1]) ? 0 : 1)" "$PKG_VER" || { echo "package.json is not 0.x ($PKG_VER); skipping tag guard."; exit 0; }
+          if git tag -l | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "Semver git tag(s) present; ok to run semantic-release on 0.x."
+            exit 0
+          fi
+          echo "::error::No vX.Y.Z git tags, but package.json is 0.x ($PKG_VER). semantic-release would publish 1.0.0. Tag published npm versions first, then push. See README → Releasing."
+          exit 1
 
       # setup-node + registry-url writes .npmrc using NODE_AUTH_TOKEN (not NPM_TOKEN).
       # @semantic-release/npm falls back to that file after OIDC exchange (404 until trusted

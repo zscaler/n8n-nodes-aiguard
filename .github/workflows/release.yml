@@ -9,6 +9,9 @@
 # Bump the version in package.json on the release PR; if that version already exists on npm,
 # the publish step is skipped (idempotent).
 #
+# Manual / API: push the version bump to main, then either merge a PR (as before) or run
+# Actions → "Release to npm" → Run workflow (workflow_dispatch), or call the GitHub API below.
+#
 # Node >= 22 required for npm ci (isolated-vm via eslint-plugin-n8n-nodes-base).
 
 name: Release to npm
@@ -17,6 +20,7 @@ on:
   pull_request:
     types: [closed]
     branches: [main, master]
+  workflow_dispatch:
 
 concurrency:
   group: release-npm-${{ github.repository }}
@@ -29,12 +33,12 @@ permissions:
 jobs:
   verify:
     name: Verify (audit, build, lint, test)
-    if: github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -62,12 +66,12 @@ jobs:
   publish:
     name: Publish to npm
     needs: verify
-    if: github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:

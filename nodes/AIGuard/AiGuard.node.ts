@@ -1,14 +1,13 @@
 import {
+  ApplicationError,
+  IDataObject,
   IExecuteFunctions,
+  IN8nHttpFullResponse,
   INodeExecutionData,
   INodeType,
   INodeTypeDescription,
   NodeOperationError,
-  IDataObject,
-  ApplicationError,
 } from 'n8n-workflow';
-
-import { spawn } from 'child_process';
 
 interface AIGuardCredentials {
   apiKey: string;
@@ -56,6 +55,8 @@ interface AIGuardResponse {
 }
 
 class AIGuardScanner {
+  constructor(private readonly helpers: IExecuteFunctions['helpers']) {}
+
   async executeScan(
     baseUrl: string,
     apiKey: string,
@@ -80,95 +81,54 @@ class AIGuardScanner {
     }
 
     const url = `${baseUrl}${endpoint}`;
-    const jsonBody = JSON.stringify(body);
 
-    const script = [
-      "const https = require('https');",
-      'const url = new URL(process.argv[1]);',
-      'const key = process.argv[2];',
-      'const body = process.argv[3];',
-      'const req = https.request({',
-      '  hostname: url.hostname,',
-      '  port: 443,',
-      '  path: url.pathname,',
-      "  method: 'POST',",
-      '  headers: {',
-      "    'Authorization': 'Bearer ' + key,",
-      "    'Content-Type': 'application/json',",
-      "    'Accept': 'application/json',",
-      "    'Content-Length': Buffer.byteLength(body),",
-      '  },',
-      '}, (res) => {',
-      "  let d = '';",
-      "  res.on('data', (c) => d += c);",
-      "  res.on('end', () => {",
-      '    process.stdout.write(JSON.stringify({ s: res.statusCode, b: d }));',
-      '  });',
-      '});',
-      "req.on('error', (e) => {",
-      '  process.stdout.write(JSON.stringify({ s: 0, b: e.message }));',
-      '});',
-      'req.write(body);',
-      'req.end();',
-    ].join('\n');
+    try {
+      const res = (await this.helpers.httpRequest({
+        method: 'POST',
+        url,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body,
+        json: true,
+        timeout: timeout + 5000,
+        returnFullResponse: true,
+        ignoreHttpStatusErrors: true,
+      })) as IN8nHttpFullResponse;
 
-    return new Promise<AIGuardResponse>((resolve, reject) => {
-      let stdout = '';
-      let stderr = '';
+      const { statusCode } = res;
+      let responseBody: unknown = res.body;
 
-      const child = spawn('node', ['-e', script, url, apiKey, jsonBody]);
-
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new ApplicationError('AI Guard request timed out'));
-      }, timeout + 5000);
-
-      child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-
-      child.on('close', code => {
-        clearTimeout(timer);
-        const output = stdout.trim();
-
-        if (!output) {
-          reject(
-            new ApplicationError(
-              `AI Guard: no output (code=${code}, stderr=${stderr.slice(0, 200)})`,
-            ),
-          );
-          return;
-        }
-
-        let parsed: { s: number; b: string };
+      if (typeof responseBody === 'string') {
+        const raw = responseBody;
         try {
-          parsed = JSON.parse(output);
+          responseBody = JSON.parse(raw) as unknown;
         } catch {
-          reject(new ApplicationError(`AI Guard parse error: ${output.slice(0, 200)}`));
-          return;
+          throw new ApplicationError(`AI Guard body parse error: ${raw.slice(0, 200)}`);
         }
+      }
 
-        if (parsed.s >= 200 && parsed.s < 300) {
-          try {
-            resolve(JSON.parse(parsed.b) as AIGuardResponse);
-          } catch {
-            reject(new ApplicationError(`AI Guard body parse error: ${parsed.b.slice(0, 200)}`));
-          }
-        } else {
-          reject(
-            new ApplicationError(`AI Guard API returned ${parsed.s}: ${parsed.b.slice(0, 300)}`),
-          );
-        }
-      });
+      if (statusCode >= 200 && statusCode < 300) {
+        return responseBody as AIGuardResponse;
+      }
 
-      child.on('error', err => {
-        clearTimeout(timer);
-        reject(new ApplicationError(`AI Guard spawn error: ${err.message}`));
-      });
-    });
+      const errText =
+        typeof responseBody === 'object' && responseBody !== null
+          ? JSON.stringify(responseBody).slice(0, 300)
+          : String(responseBody).slice(0, 300);
+      throw new ApplicationError(`AI Guard API returned ${statusCode}: ${errText}`);
+    } catch (error) {
+      if (error instanceof ApplicationError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      if (/timeout|ETIMEDOUT|aborted/i.test(message)) {
+        throw new ApplicationError('AI Guard request timed out');
+      }
+      throw new ApplicationError(`AI Guard request failed: ${message}`);
+    }
   }
 }
 
@@ -437,7 +397,7 @@ export class AiGuard implements INodeType {
         const policyIdOverride = (additionalOptions.policyIdOverride as string) || '';
         const policyIdStr = policyIdOverride || credentials.policyId || '';
 
-        const scanner = new AIGuardScanner();
+        const scanner = new AIGuardScanner(this.helpers);
 
         const buildPayload = (content: string, direction: 'IN' | 'OUT'): AIGuardScanPayload => {
           const payload: AIGuardScanPayload = { content, direction };

@@ -197,7 +197,7 @@ Use the `action` or `blocked` field in an **IF** node to branch your workflow lo
 
 ## Implementation Notes
 
-The node makes direct HTTPS calls to the Zscaler AI Guard API using Node.js's native `https` module via an isolated child process. This approach matches the authentication and header format of the [zscaler-sdk-python](https://github.com/zscaler/zscaler-sdk-python):
+The node calls the Zscaler AI Guard API over HTTPS using n8n’s `helpers.httpRequest` (required for n8n Cloud–verified community packages). Headers match the [zscaler-sdk-python](https://github.com/zscaler/zscaler-sdk-python) pattern:
 
 - `Authorization: Bearer <API_KEY>`
 - `Content-Type: application/json`
@@ -206,7 +206,7 @@ The node makes direct HTTPS calls to the Zscaler AI Guard API using Node.js's na
 ## Error Handling
 
 - **Fail-closed by default**: When "Continue On Fail" is enabled in n8n, errors produce `{ action: "BLOCK", blocked: true }` rather than silently allowing content through
-- **Timeout protection**: Configurable per-request timeout with automatic child process cleanup
+- **Timeout protection**: Configurable per-request timeout (passed to the HTTP client)
 - **Content validation**: Payloads exceeding 5 MB are rejected before the API call
 - **Retry logic**: Configurable retry count (default 3, max 6) for transient failures
 
@@ -215,12 +215,45 @@ The node makes direct HTTPS calls to the Zscaler AI Guard API using Node.js's na
 ```bash
 npm run build       # Compile TypeScript and copy assets
 npm run dev         # Watch mode
-npm run lint        # Run ESLint
+npm run lint        # ESLint (TypeScript + n8n-nodes-base)
+npm run lint:dist   # ESLint on dist/ (n8n Cloud rules; run after build)
+npm run scan:local  # build + ESLint (unpublished dist/; same rules as official scanner)
+npm run scan:npm    # npx @n8n/scan-community-package @…@version from package.json (needs publish)
 npm run lintfix     # Auto-fix lint issues
 npm run format      # Run Prettier
 npm test            # Run Jest tests
 npm run test:coverage  # Tests with coverage report
 ```
+
+### Validate like the n8n Creator Portal
+
+n8n’s official tool is **`@n8n/scan-community-package`**. It **downloads the package from the npm registry** and runs ESLint with the same rules the Creator Portal uses. It **never** reads your local git tree.
+
+Use **both** of these, at different times:
+
+| Command | When to use |
+|--------|-------------|
+| **`npm run scan:local`** | Before publish: builds `dist/` and runs the **same ESLint config** the scanner uses (`eslint.community.config.mjs`). This is what CI runs as `lint:dist`. |
+| **`npm run scan:npm`** | After that **exact `version` in `package.json` exists on npm**: runs `npx @n8n/scan-community-package <name>@<version>`. Confirms the **published tarball** matches what the Portal checks. |
+
+```bash
+# Unpublished changes (day to day)
+npm run scan:local
+
+# After npm publish of the current package.json version
+npm run scan:npm
+```
+
+You can also call the CLI directly, for example `npx @n8n/scan-community-package @bdzscaler/n8n-nodes-aiguard@0.1.2`. If the version is **not** on the registry yet, the download step fails—that is expected; use **`scan:local`** until it is published.
+
+## Releasing (maintainers)
+
+Releases are automated with [semantic-release](https://github.com/semantic-release/semantic-release) (see `.releaserc.json`), similar to [zscaler-mcp-server](https://github.com/zscaler/zscaler-mcp-server).
+
+- **Version and tag**: The next version is computed from [Conventional Commits](https://www.conventionalcommits.org/) on the branch (for example `fix:` → patch, `feat:` → minor). semantic-release updates `package.json` and `package-lock.json`, creates tag `vX.Y.Z`, opens a **GitHub Release**, and publishes to npm with **provenance** (requires `NPM_TOKEN` in repository secrets).
+- **Pre-release checks**: The **Release** workflow runs `npm audit`, build, Prettier, ESLint (including `lint:dist`, which mirrors the n8n Creator Portal scanner rules), and Jest before any publish.
+- **Prerelease channels**: Pushes to branches `beta` or `alpha` publish npm prereleases (for example `1.0.0-beta.1`) on the corresponding dist-tag.
+- **First-time setup**: If semantic-release has never run, ensure git tags exist for versions already on npm (for example `git tag v0.1.2 <commit> && git push origin v0.1.2`) so the next release continues from the correct baseline.
 
 ## Security
 
@@ -245,5 +278,6 @@ MIT — see [LICENSE](LICENSE) for details.
 1. Fork the repository
 2. Create a feature branch from `main`
 3. Test thoroughly against the AI Guard API
-4. Ensure `npm run lint` and `npm test` pass
-5. Submit a pull request
+4. Ensure `npm run build`, `npm run lint`, `npm run lint:dist`, and `npm test` pass
+5. Use conventional commit messages (`fix:`, `feat:`, etc.) so releases version correctly
+6. Submit a pull request

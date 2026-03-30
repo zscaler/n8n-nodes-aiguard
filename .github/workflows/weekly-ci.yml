@@ -8,7 +8,7 @@
 # Node: devDependencies (eslint-plugin-n8n-nodes-base → isolated-vm) require Node >= 22.
 # Older Node versions fail npm ci during isolated-vm native compile (see V8 SourceLocation errors).
 #
-# Release / npm publish: see .github/workflows/release.yml
+# Release: semantic-release on push (see .github/workflows/release.yml)
 
 name: Weekly CI
 
@@ -48,8 +48,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: npm audit
-        run: npm audit --audit-level=moderate
+      # Omit devDependencies: @semantic-release/npm depends on the `npm` package, whose
+      # bundled deps trigger false-positive–style audit noise unrelated to the published tarball.
+      - name: npm audit (production graph only)
+        run: npm audit --omit=dev --audit-level=moderate
 
       - name: Build
         run: npm run build
@@ -59,6 +61,9 @@ jobs:
 
       - name: ESLint
         run: npm run lint
+
+      - name: ESLint (n8n Cloud / dist)
+        run: npm run lint:dist
 
       - name: Unit tests (Jest)
         run: npm test -- --passWithNoTests

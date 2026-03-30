@@ -1,0 +1,45 @@
+{
+	"branches": [
+		"main",
+		"master",
+		{
+			"name": "beta",
+			"prerelease": true
+		},
+		{
+			"name": "alpha",
+			"prerelease": true
+		}
+	],
+	"preset": "conventionalcommits",
+	"plugins": [
+		"@semantic-release/commit-analyzer",
+		"@semantic-release/release-notes-generator",
+		[
+			"@semantic-release/npm",
+			{
+				"npmPublish": true,
+				"provenance": true
+			}
+		],
+		[
+			"@semantic-release/exec",
+			{
+				"prepareCmd": "npm install --package-lock-only --ignore-scripts"
+			}
+		],
+		[
+			"@semantic-release/git",
+			{
+				"assets": ["package.json", "package-lock.json"],
+				"message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
+			}
+		],
+		[
+			"@semantic-release/github",
+			{
+				"successComment": ":tada: This ${issue.pull_request ? 'PR is included' : 'issue has been resolved'} in version ${nextRelease.version} :tada:\n\nThe release is available on [npm](https://www.npmjs.com/package/@bdzscaler/n8n-nodes-aiguard/v/${nextRelease.version}) and [GitHub Releases](https://github.com/zscaler/n8n-nodes-aiguard/releases/tag/v${nextRelease.version})\n\n> Posted by [semantic-release](https://github.com/semantic-release/semantic-release)"
+			}
+		]
+	]
+}

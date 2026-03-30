@@ -1,44 +1,44 @@
-# Publish @bdzscaler/n8n-nodes-aiguard to npm when a PR is merged into the default branch.
+# Release pipeline: verify → semantic-release (version bump, tag, GitHub Release, npm publish).
 #
-# Triggers: pull_request closed + merged only (not direct pushes, not closed-without-merge).
-# Gates: npm audit → build → prettier → eslint → jest must pass before publish.
+# Version is derived from [Conventional Commits](https://www.conventionalcommits.org/) on the
+# default branch, not from a manually edited package.json. semantic-release updates package.json
+# and package-lock.json, creates git tag vX.Y.Z, publishes to npm with provenance, and opens
+# a GitHub Release.
 #
-# Setup (repository Settings → Secrets → Actions):
-#   NPM_TOKEN — npm automation token with publish rights for the @bdzscaler scope
+# Prereleases: push to branch `beta` or `alpha` to publish e.g. 1.0.0-beta.1 on npm dist-tag
+# `beta` / `alpha` (see .releaserc.json "branches").
 #
-# Bump the version in package.json on the release PR; if that version already exists on npm,
-# the publish step is skipped (idempotent).
+# Before first semantic-release run, ensure git tags exist for versions already published to npm
+# (e.g. git tag v0.1.2 <commit> && git push origin v0.1.2) so the next bump continues from 0.x.
 #
-# Manual / API: push the version bump to main, then either merge a PR (as before) or run
-# Actions → "Release to npm" → Run workflow (workflow_dispatch), or call the GitHub API below.
+# Secrets (Settings → Secrets → Actions):
+#   NPM_TOKEN — npm automation token with publish rights for @bdzscaler
 #
-# Node >= 22 required for npm ci (isolated-vm via eslint-plugin-n8n-nodes-base).
+# Permissions: default GITHUB_TOKEN is used for releases and tags (contents: write).
 
-name: Release to npm
+name: Release
 
 on:
+  push:
+    branches: [main, master, beta, alpha]
   pull_request:
-    types: [closed]
     branches: [main, master]
-  workflow_dispatch:
 
 concurrency:
-  group: release-npm-${{ github.repository }}
-  cancel-in-progress: false
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
-  contents: read
-  id-token: write
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   verify:
-    name: Verify (audit, build, lint, test)
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    name: Pre-release verification
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -48,8 +48,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: npm audit
-        run: npm audit --audit-level=moderate
+      # Only the production dependency graph (this package ships `dependencies: {}`).
+      # Full `npm audit` fails on nested packages inside the `npm` tarball pulled by
+      # @semantic-release/npm — not exploitable from the published community node.
+      - name: npm audit (production graph only)
+        run: npm audit --omit=dev --audit-level=moderate
 
       - name: Build
         run: npm run build
@@ -57,21 +60,30 @@ jobs:
       - name: Prettier (check)
         run: npx prettier --check nodes credentials
 
-      - name: ESLint
+      - name: ESLint (TypeScript / n8n-nodes-base)
         run: npm run lint
+
+      - name: ESLint (n8n Cloud / dist — matches Creator Portal scanner)
+        run: npm run lint:dist
 
       - name: Unit tests (Jest)
         run: npm test -- --passWithNoTests
 
-  publish:
-    name: Publish to npm
+  release:
+    name: semantic-release (tag, GitHub Release, npm)
     needs: verify
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
 
       - uses: actions/setup-node@v4
         with:
@@ -82,23 +94,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check if version is already on npm
-        id: version
+      - name: Configure git for semantic-release commits
         run: |
-          PKG=$(node -p "require('./package.json').name")
-          VER=$(node -p "require('./package.json').version")
-          echo "pkg=${PKG}" >> "$GITHUB_OUTPUT"
-          echo "ver=${VER}" >> "$GITHUB_OUTPUT"
-          if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Version ${VER} is already published; skipping npm publish."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Version ${VER} not found on npm; will publish."
-          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Publish to npm
-        if: steps.version.outputs.exists != 'true'
-        run: npm publish --provenance --access public
+      - name: Run semantic-release
+        run: npx semantic-release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

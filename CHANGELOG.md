@@ -4,6 +4,12 @@ All notable changes to **@bdzscaler/n8n-nodes-aiguard** are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] — 2026-03-30
+
+### Fixed
+
+- **n8n Cloud / Creator Portal security scan:** Replaced `child_process` and `setTimeout`/`clearTimeout` with `helpers.httpRequest` so published `dist` passes `@n8n/community-nodes` ESLint rules (`no-restricted-imports`, `no-restricted-globals`).
+
 ## [0.1.1] — 2026-03-30
 
 ### Changed
@@ -21,5 +27,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Limits:** Request timeout, configurable retries, and a 5MB content-size guard.
 - **Packaging:** MIT-licensed community node with `n8n-community-node-package` metadata for installation from npm.
 
+[0.1.2]: https://github.com/zscaler/n8n-nodes-aiguard
 [0.1.1]: https://github.com/zscaler/n8n-nodes-aiguard
 [0.1.0]: https://github.com/zscaler/n8n-nodes-aiguard

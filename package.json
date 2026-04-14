@@ -30,7 +30,7 @@
   "packageManager": "npm@10.9.2",
   "main": "index.js",
   "scripts": {
-    "build": "tsc && node -e \"const fs=require('fs');fs.mkdirSync('dist/nodes/AIGuard',{recursive:true});fs.copyFileSync('nodes/AIGuard/aiguard.svg','dist/nodes/AIGuard/aiguard.svg')\"",
+    "build": "tsc && node -e \"const fs=require('fs');fs.mkdirSync('dist/nodes/AIGuard',{recursive:true});fs.copyFileSync('nodes/AIGuard/aiguard.svg','dist/nodes/AIGuard/aiguard.svg');fs.mkdirSync('dist/credentials',{recursive:true});fs.copyFileSync('nodes/AIGuard/aiguard.svg','dist/credentials/aiguard.svg')\"",
     "dev": "tsc --watch",
     "format": "prettier nodes credentials --write",
     "lint": "eslint nodes credentials package.json",

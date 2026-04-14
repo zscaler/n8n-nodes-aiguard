@@ -8,6 +8,7 @@ import {
 export class AIGuardApi implements ICredentialType {
   name = 'aiGuardApi';
   displayName = 'Zscaler AI Guard API';
+  icon = 'file:aiguard.svg' as const;
   documentationUrl = 'https://help.zscaler.com/ai-guard';
   properties: INodeProperties[] = [
     {

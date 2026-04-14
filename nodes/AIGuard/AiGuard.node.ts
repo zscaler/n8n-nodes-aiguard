@@ -109,7 +109,9 @@ class AIGuardScanner {
         try {
           responseBody = JSON.parse(raw) as unknown;
         } catch {
-          throw new NodeApiError(this.context.getNode(), { message: `AI Guard body parse error: ${raw.slice(0, 200)}` });
+          throw new NodeApiError(this.context.getNode(), {
+            message: `AI Guard body parse error: ${raw.slice(0, 200)}`,
+          });
         }
       }
 
@@ -124,7 +126,10 @@ class AIGuardScanner {
       throw new NodeApiError(
         this.context.getNode(),
         { message: errText, statusCode },
-        { httpCode: String(statusCode), message: `AI Guard API returned ${statusCode}: ${errText}` },
+        {
+          httpCode: String(statusCode),
+          message: `AI Guard API returned ${statusCode}: ${errText}`,
+        },
       );
     } catch (error) {
       if (error instanceof NodeApiError) {
@@ -136,7 +141,7 @@ class AIGuardScanner {
       }
       throw new NodeApiError(
         this.context.getNode(),
-        (error instanceof Error ? { message: error.message } : { message }),
+        error instanceof Error ? { message: error.message } : { message },
       );
     }
   }

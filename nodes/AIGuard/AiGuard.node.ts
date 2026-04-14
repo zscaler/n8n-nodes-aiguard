@@ -6,6 +6,8 @@ import {
   INodeExecutionData,
   INodeType,
   INodeTypeDescription,
+  NodeApiError,
+  NodeConnectionTypes,
   NodeOperationError,
 } from 'n8n-workflow';
 
@@ -55,11 +57,10 @@ interface AIGuardResponse {
 }
 
 class AIGuardScanner {
-  constructor(private readonly helpers: IExecuteFunctions['helpers']) {}
+  constructor(private readonly context: IExecuteFunctions) {}
 
   async executeScan(
     baseUrl: string,
-    apiKey: string,
     payload: AIGuardScanPayload,
     timeout: number,
   ): Promise<AIGuardResponse> {
@@ -83,20 +84,22 @@ class AIGuardScanner {
     const url = `${baseUrl}${endpoint}`;
 
     try {
-      const res = (await this.helpers.httpRequest({
-        method: 'POST',
-        url,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
+      const res = (await this.context.helpers.httpRequestWithAuthentication.call(
+        this.context,
+        'aiGuardApi',
+        {
+          method: 'POST',
+          url,
+          headers: {
+            Accept: 'application/json',
+          },
+          body,
+          json: true,
+          timeout: timeout + 5000,
+          returnFullResponse: true,
+          ignoreHttpStatusErrors: true,
         },
-        body,
-        json: true,
-        timeout: timeout + 5000,
-        returnFullResponse: true,
-        ignoreHttpStatusErrors: true,
-      })) as IN8nHttpFullResponse;
+      )) as IN8nHttpFullResponse;
 
       const { statusCode } = res;
       let responseBody: unknown = res.body;
@@ -106,7 +109,7 @@ class AIGuardScanner {
         try {
           responseBody = JSON.parse(raw) as unknown;
         } catch {
-          throw new ApplicationError(`AI Guard body parse error: ${raw.slice(0, 200)}`);
+          throw new NodeApiError(this.context.getNode(), { message: `AI Guard body parse error: ${raw.slice(0, 200)}` });
         }
       }
 
@@ -118,16 +121,23 @@ class AIGuardScanner {
         typeof responseBody === 'object' && responseBody !== null
           ? JSON.stringify(responseBody).slice(0, 300)
           : String(responseBody).slice(0, 300);
-      throw new ApplicationError(`AI Guard API returned ${statusCode}: ${errText}`);
+      throw new NodeApiError(
+        this.context.getNode(),
+        { message: errText, statusCode },
+        { httpCode: String(statusCode), message: `AI Guard API returned ${statusCode}: ${errText}` },
+      );
     } catch (error) {
-      if (error instanceof ApplicationError) {
+      if (error instanceof NodeApiError) {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);
       if (/timeout|ETIMEDOUT|aborted/i.test(message)) {
-        throw new ApplicationError('AI Guard request timed out');
+        throw new NodeApiError(this.context.getNode(), { message: 'AI Guard request timed out' });
       }
-      throw new ApplicationError(`AI Guard request failed: ${message}`);
+      throw new NodeApiError(
+        this.context.getNode(),
+        (error instanceof Error ? { message: error.message } : { message }),
+      );
     }
   }
 }
@@ -135,7 +145,6 @@ class AIGuardScanner {
 async function executeScanWithRetries(
   scanner: AIGuardScanner,
   baseUrl: string,
-  apiKey: string,
   payload: AIGuardScanPayload,
   timeout: number,
   maxRetries: number,
@@ -143,7 +152,7 @@ async function executeScanWithRetries(
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await scanner.executeScan(baseUrl, apiKey, payload, timeout);
+      return await scanner.executeScan(baseUrl, payload, timeout);
     } catch (error) {
       lastError = error;
       if (attempt === maxRetries) {
@@ -212,8 +221,8 @@ export class AiGuard implements INodeType {
     defaults: {
       name: 'AI Guard',
     },
-    inputs: ['main'],
-    outputs: ['main'],
+    inputs: [NodeConnectionTypes.Main],
+    outputs: [NodeConnectionTypes.Main],
     credentials: [
       {
         name: 'aiGuardApi',
@@ -228,6 +237,12 @@ export class AiGuard implements INodeType {
         noDataExpression: true,
         options: [
           {
+            name: 'Dual Scan',
+            value: 'dualScan',
+            description: 'Scan both prompt and response in sequence',
+            action: 'Perform dual scanning of prompt and response',
+          },
+          {
             name: 'Prompt Scan',
             value: 'promptScan',
             description: 'Scan user input/prompts for security threats',
@@ -238,12 +253,6 @@ export class AiGuard implements INodeType {
             value: 'responseScan',
             description: 'Scan AI-generated responses for policy violations',
             action: 'Scan a response for policy violations',
-          },
-          {
-            name: 'Dual Scan',
-            value: 'dualScan',
-            description: 'Scan both prompt and response in sequence',
-            action: 'Perform dual scanning of prompt and response',
           },
         ],
         default: 'promptScan',
@@ -397,7 +406,7 @@ export class AiGuard implements INodeType {
         const policyIdOverride = (additionalOptions.policyIdOverride as string) || '';
         const policyIdStr = policyIdOverride || credentials.policyId || '';
 
-        const scanner = new AIGuardScanner(this.helpers);
+        const scanner = new AIGuardScanner(this);
 
         const buildPayload = (content: string, direction: 'IN' | 'OUT'): AIGuardScanPayload => {
           const payload: AIGuardScanPayload = { content, direction };
@@ -422,7 +431,6 @@ export class AiGuard implements INodeType {
             scanResult = await executeScanWithRetries(
               scanner,
               baseUrl,
-              credentials.apiKey,
               buildPayload(content, 'IN'),
               timeout,
               maxRetries,
@@ -435,7 +443,6 @@ export class AiGuard implements INodeType {
             scanResult = await executeScanWithRetries(
               scanner,
               baseUrl,
-              credentials.apiKey,
               buildPayload(content, 'OUT'),
               timeout,
               maxRetries,
@@ -452,7 +459,6 @@ export class AiGuard implements INodeType {
             const promptResult = await executeScanWithRetries(
               scanner,
               baseUrl,
-              credentials.apiKey,
               buildPayload(promptContent, 'IN'),
               timeout,
               maxRetries,
@@ -466,7 +472,6 @@ export class AiGuard implements INodeType {
             const responseResult = await executeScanWithRetries(
               scanner,
               baseUrl,
-              credentials.apiKey,
               buildPayload(responseContent, 'OUT'),
               timeout,
               maxRetries,
